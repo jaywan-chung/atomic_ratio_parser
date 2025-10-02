@@ -29,6 +29,10 @@ _prog_chemical_symbol = re.compile(CHEMICAL_SYMBOL_PATTERN)
 _prog_positive_float = re.compile(POSITIVE_FLOAT_PATTERN)
 
 
+class InvalidChemicalFormulaError(Exception):
+    """Exception for invalid chemical formula."""
+
+
 def parse_atomic_ratio(string):
     """Parse atomic ratios from the string.
     Only the first chemical formula is parsed if there are many.
@@ -58,7 +62,7 @@ def parse_atomic_ratio(string):
             # expand the formula and parse it
             expanded_formula = _get_expanded_chemical_formula(token)
             result = _parse_atomic_ratio_from_expanded_chemical_formula(expanded_formula)
-        except ValueError:  # not a chemical formula
+        except InvalidChemicalFormulaError:  # not a chemical formula
             continue
         break  # stop if a chemical formula is found
     return result
@@ -74,7 +78,7 @@ def _get_expanded_chemical_formula(chemical_formula):
     :return: An expanded chemical formula
     :rtype: str
 
-    :raises ValueError: When the `chemical_formula` is not a valid chemical formula.
+    :raises InvalidChemicalFormulaError: When the `chemical_formula` is not a valid chemical formula.
     """
     prev_formula = None
     formula = chemical_formula
@@ -94,7 +98,7 @@ def _expand_innermost_atomic_ratio(chemical_formula):
     :return: The chemical formula with the innermost formula expanded.
     :rtype: str
 
-    :raises ValueError: When the `chemical_formula` is not a valid chemical formula.
+    :raises InvalidChemicalFormulaError: When the `chemical_formula` is not a valid chemical formula.
     """
     # find the innermost parentheses
     right_parenthesis_idx = chemical_formula.find(')')
@@ -103,9 +107,9 @@ def _expand_innermost_atomic_ratio(chemical_formula):
         if left_parenthesis_idx < 0:  # if there is no parentheses, nothing to do
             return chemical_formula
         else:
-            raise ValueError('Invalid chemical formula: missing right parenthesis')
+            raise InvalidChemicalFormulaError('Right parenthesis is missing')
     if left_parenthesis_idx < 0:
-        raise ValueError('Invalid chemical formula: missing left parenthesis')
+        raise InvalidChemicalFormulaError('Left parenthesis is missing')
 
     ratio_match = _prog_positive_float.match(chemical_formula[right_parenthesis_idx+1:])
     parentheses_ratio = Decimal('1')
@@ -151,7 +155,7 @@ def _parse_atomic_ratio_from_expanded_chemical_formula(expanded_chemical_formula
     :return: A dictionary of atomic symbol-atomic ratio pairs.
     :rtype: dict
 
-    :raises ValueError: When the `simple_chemical_formula` is not a simple, expanded chemical formula.
+    :raises InvalidChemicalFormulaError: When the `simple_chemical_formula` is not a simple, expanded chemical formula.
     """
     formula = expanded_chemical_formula
     result = {}
@@ -175,7 +179,8 @@ def _parse_atomic_ratio_from_expanded_chemical_formula(expanded_chemical_formula
         result[chemical_symbol] = result.get(chemical_symbol, Decimal('0')) + atomic_ratio
 
     if len(formula) > 0:
-        raise ValueError(f'{repr(expanded_chemical_formula)} is not a simple, expanded chemical formula')
+        raise InvalidChemicalFormulaError(
+            f'{repr(expanded_chemical_formula)} is not a simple, expanded chemical formula')
 
     return result
 
@@ -210,7 +215,7 @@ class AtomicRatioParserTest(unittest.TestCase):
 
         inputs_raising_error = ('BiTe)2Te', 'Al2(SO4_3', '(Ale)2')
         for input in inputs_raising_error:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidChemicalFormulaError):
                 _expand_innermost_atomic_ratio(input)
 
     def test_expand_innermost_atomic_ratio(self):
@@ -224,7 +229,7 @@ class AtomicRatioParserTest(unittest.TestCase):
 
         inputs_raising_error = ('BiTe)2Te', 'Al2(SO4_3', '(Ale)2')
         for input in inputs_raising_error:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidChemicalFormulaError):
                 _expand_innermost_atomic_ratio(input)
 
     def test_convert_ratio_dict_to_str(self):
@@ -245,5 +250,5 @@ class AtomicRatioParserTest(unittest.TestCase):
 
         formulas_raising_error = ('(BiTe)2Te', 'Bi_2Te_3', 'Al_2(SO_4)_3')
         for formula in formulas_raising_error:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidChemicalFormulaError):
                 _parse_atomic_ratio_from_expanded_chemical_formula(formula)
